@@ -25,7 +25,10 @@ attestations. The executable inside each archive is named `tree-sitter`.
 The [release workflow](.github/workflows/release.yml):
 
 1. Checks the latest stable upstream release on the first day of each month.
-2. Checks out the exact upstream tag.
+2. Checks out the exact upstream tag. Where needed, translates the Linux allocator
+   export linker option from `--dynamic-list` to `--export-dynamic` plus an anonymous
+   version script with the same four exports. No parser or CLI source is changed;
+   CI fails if the expected upstream build-script layout changes.
 3. Builds `tree-sitter-cli` with Rust and Zig via `cargo-zigbuild`, targeting glibc 2.17.
 4. Runs the binary and inspects its ELF symbol versions, failing if any required
    `GLIBC_*` version is newer than 2.17. Also runs `--version` and `build --help`
