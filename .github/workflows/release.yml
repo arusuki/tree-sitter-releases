@@ -132,6 +132,8 @@ jobs:
           tar -xJf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/zig" --strip-components=1
 
           echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+          echo "CARGO_ZIGBUILD_ZIG_COMMAND=$RUNNER_TEMP/zig/zig" >> "$GITHUB_ENV"
+          test "$("$RUNNER_TEMP/zig/zig" version)" = "$ZIG_VERSION"
 
       - name: Install and verify cargo-zigbuild
         run: |
@@ -146,6 +148,39 @@ jobs:
           tar -xJf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/cargo-zigbuild" --strip-components=1
           "$RUNNER_TEMP/cargo-zigbuild/cargo-zigbuild" --version
           echo "$RUNNER_TEMP/cargo-zigbuild" >> "$GITHUB_PATH"
+
+      - name: Adapt upstream allocator exports for Zig
+        run: |
+          set -euo pipefail
+
+          # Zig's linker-argument parser rejects --dynamic-list. An anonymous
+          # version script plus --export-dynamic exports the same allocator hooks.
+          # Fail closed if the upstream build script changes unexpectedly.
+          python3 - <<'PY'
+          from pathlib import Path
+          candidates = [Path("crates/cli/build.rs"), Path("cli/build.rs")]
+          source = next(path for path in candidates if path.is_file())
+          text = source.read_text()
+          if "--dynamic-list" in text:
+              replacements = {
+                  '"{\n                ts_current_malloc;':
+                      '"{\n                global:\n                ts_current_malloc;',
+                  'ts_current_free;\n            };':
+                      'ts_current_free;\n                local: *;\n            };',
+                  'cargo:rustc-link-arg=-Wl,--dynamic-list={}':
+                      'cargo:rustc-link-arg=-Wl,--export-dynamic,--version-script={}',
+              }
+              for old, new in replacements.items():
+                  if text.count(old) != 1:
+                      raise SystemExit("Upstream allocator export layout changed; review required")
+                  text = text.replace(old, new)
+              source.write_text(text)
+              print("Adapted allocator exports to a Zig-compatible version script")
+          else:
+              print("No upstream dynamic-list argument; no adaptation needed")
+          PY
+          git diff --check
+          git diff -- crates/cli/build.rs cli/build.rs
 
       - name: Build tree-sitter CLI
         run: |
@@ -173,7 +208,7 @@ jobs:
 
           # Recent upstream releases export allocator hooks for external scanners.
           # Verify these survive linking and stripping when upstream requests them.
-          if grep -R -q -- '--dynamic-list' crates/cli/build.rs cli/build.rs 2>/dev/null; then
+          if grep -R -q -- 'ts_current_malloc' crates/cli/build.rs cli/build.rs 2>/dev/null; then
             nm -D --defined-only "$binary" > "$RUNNER_TEMP/dynamic-symbols.txt"
             for symbol in ts_current_malloc ts_current_calloc ts_current_realloc ts_current_free; do
               if ! awk '{print $NF}' "$RUNNER_TEMP/dynamic-symbols.txt" | grep -Fx "$symbol"; then
@@ -238,6 +273,7 @@ jobs:
           source_repository=https://github.com/${UPSTREAM_REPOSITORY}
           source_tag=${UPSTREAM_TAG}
           source_commit=$(git rev-parse HEAD)
+          build_script_patch=dynamic-list-to-version-script-when-needed
           rust_target=${RUST_TARGET}
           rustc=$(rustc --version)
           zig=$(zig version)
