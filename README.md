@@ -26,9 +26,10 @@ The [release workflow](.github/workflows/release.yml):
 
 1. Checks the latest stable upstream release on the first day of each month.
 2. Checks out the exact upstream tag.
-3. Builds `tree-sitter-cli` with Rust and Zig, targeting glibc 2.17.
+3. Builds `tree-sitter-cli` with Rust and Zig via `cargo-zigbuild`, targeting glibc 2.17.
 4. Runs the binary and inspects its ELF symbol versions, failing if any required
-   `GLIBC_*` version is newer than 2.17.
+   `GLIBC_*` version is newer than 2.17. Also runs `--version` and `build --help`
+   inside a manylinux2014 container whose libc version is asserted to be 2.17.
 5. Publishes compressed binaries, checksums, and provenance to a release with
    the same tag.
 
@@ -65,5 +66,5 @@ scanners compiled later must also be built for the target system's ABI.
 - Source: [`tree-sitter/tree-sitter`](https://github.com/tree-sitter/tree-sitter)
 - glibc baseline: `2.17`
 - Zig: `0.13.0` (downloaded from ziglang.org and SHA-256 verified)
+- cargo-zigbuild: `0.23.4` (upstream release binary, SHA-256 verified)
 - Rust dependencies: the upstream tag's committed `Cargo.lock`
-
