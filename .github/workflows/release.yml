@@ -23,7 +23,7 @@ concurrency:
 env:
   GLIBC_VERSION: "2.17"
   UPSTREAM_REPOSITORY: tree-sitter/tree-sitter
-  ZIG_VERSION: "0.13.0"
+  ZIG_VERSION: "0.16.0"
   CARGO_ZIGBUILD_VERSION: "0.23.4"
 
 jobs:
@@ -88,13 +88,13 @@ jobs:
             runner: ubuntu-22.04
             rust_target: x86_64-unknown-linux-gnu
             zig_arch: x86_64
-            zig_sha256: d45312e61ebcc48032b77bc4cf7fd6915c11fa16e4aad116b66c9468211230ea
+            zig_sha256: 70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00
             zigbuild_sha256: 6b69963040818ca1ef573d8135a95aa902e17cf7f873c32c6426642dadfe7f59
           - platform: linux-arm64
             runner: ubuntu-22.04-arm
             rust_target: aarch64-unknown-linux-gnu
             zig_arch: aarch64
-            zig_sha256: 041ac42323837eb5624068acd8b00cd5777dac4cf91179e8dad7a7e90dd0c556
+            zig_sha256: ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17
             zigbuild_sha256: 25cf2cdc6cde848b33a761ff2cf46d1efe6ba7e1adfc4b6f3ee2d570cacb5419
     env:
       CARGO_TERM_COLOR: always
@@ -122,7 +122,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          archive="zig-linux-${ZIG_ARCH}-${ZIG_VERSION}.tar.xz"
+          archive="zig-${ZIG_ARCH}-linux-${ZIG_VERSION}.tar.xz"
           url="https://ziglang.org/download/${ZIG_VERSION}/${archive}"
           curl --proto '=https' --tlsv1.2 --fail --location --retry 3 \
             "$url" --output "$RUNNER_TEMP/$archive"
@@ -170,6 +170,18 @@ jobs:
           test -x "$binary"
           "$binary" --version
           file "$binary"
+
+          # Recent upstream releases export allocator hooks for external scanners.
+          # Verify these survive linking and stripping when upstream requests them.
+          if grep -R -q -- '--dynamic-list' crates/cli/build.rs cli/build.rs 2>/dev/null; then
+            nm -D --defined-only "$binary" > "$RUNNER_TEMP/dynamic-symbols.txt"
+            for symbol in ts_current_malloc ts_current_calloc ts_current_realloc ts_current_free; do
+              if ! awk '{print $NF}' "$RUNNER_TEMP/dynamic-symbols.txt" | grep -Fx "$symbol"; then
+                echo "::error::Missing external scanner allocator symbol: $symbol"
+                exit 1
+              fi
+            done
+          fi
 
           mapfile -t glibc_versions < <(
             readelf --version-info "$binary" \
