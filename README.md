@@ -30,6 +30,7 @@ The [release workflow](.github/workflows/release.yml):
 4. Runs the binary and inspects its ELF symbol versions, failing if any required
    `GLIBC_*` version is newer than 2.17. Also runs `--version` and `build --help`
    inside a manylinux2014 container whose libc version is asserted to be 2.17.
+   Checks the allocator exports used by external scanners when upstream requests them.
 5. Publishes compressed binaries, checksums, and provenance to a release with
    the same tag.
 
@@ -65,6 +66,6 @@ scanners compiled later must also be built for the target system's ABI.
 
 - Source: [`tree-sitter/tree-sitter`](https://github.com/tree-sitter/tree-sitter)
 - glibc baseline: `2.17`
-- Zig: `0.13.0` (downloaded from ziglang.org and SHA-256 verified)
+- Zig: `0.16.0` (downloaded from ziglang.org and SHA-256 verified)
 - cargo-zigbuild: `0.23.4` (upstream release binary, SHA-256 verified)
 - Rust dependencies: the upstream tag's committed `Cargo.lock`
